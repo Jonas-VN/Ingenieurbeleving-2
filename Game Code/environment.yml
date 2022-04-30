@@ -1,0 +1,9 @@
+name: Ingenieursbeleving
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8
+  - pysdl2
+  - pillow
+  - numpy
+  
