@@ -611,7 +611,7 @@ def render_static(renderer, p_speler, minimap, sprites, text, textInfo, text_spr
 def ghost_movement(p_ghost, possibleDirections, ghostDirection, moveCounter, delta):
     global possibleSpawns
     moveCounter += 1
-    speed = 0.5 / delta
+    speed = 0.8667 / delta
     step = 1 / speed
 
     if moveCounter >= speed:
