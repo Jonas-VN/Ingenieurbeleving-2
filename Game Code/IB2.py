@@ -608,13 +608,13 @@ def render_static(renderer, p_speler, minimap, sprites, text, textInfo, text_spr
 # Output: p_ghost, possibleDirections, ghostDirection, moveCounter                                                  #
 #####################################################################################################################
 
-def ghost_movement(p_ghost, possibleDirections, ghostDirection, moveCounter):
+def ghost_movement(p_ghost, possibleDirections, ghostDirection, moveCounter, delta):
     global possibleSpawns
     moveCounter += 1
-    speed = 10
+    speed = 0.5 / delta
     step = 1 / speed
 
-    if moveCounter == speed:
+    if moveCounter >= speed:
         # Veiligheid voor als er toch een afrondingsfout zou inzitten
         p_ghost = [int(p_ghost[0]) + 0.5, int(p_ghost[1]) + 0.5]
 
@@ -1039,7 +1039,7 @@ def main():
 
             # ---> Ghost <--- #
             p_ghost, possibleDirections, ghostDirection, moveCounter = \
-                ghost_movement(p_ghost, possibleDirections, ghostDirection, moveCounter)
+                ghost_movement(p_ghost, possibleDirections, ghostDirection, moveCounter, delta)
 
             # Int nemen van elke coëfficient in de array -> makkelijker checken ofdat de gem gecollect is
             if np.array_equal(p_speler.astype(int), [int(p_ghost[0]), int(p_ghost[1])]):
