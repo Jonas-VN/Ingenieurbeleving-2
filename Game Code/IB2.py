@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore")
+
 import math
 import numpy as np
 import random
@@ -10,6 +13,7 @@ from sdl2 import *
 import serial
 import time
 import platform
+from numba import jit
 
 windows = False
 if "Windows" == platform.system():
@@ -286,7 +290,7 @@ def verwerk_input(delta):
             tab += 1
 
         if 'q' in response:
-            if tab % 2 == 0:
+            if tab % 2 == 0 and FOV > 1:
                 FOV -= 1
             if tab % 2 == 1:
                 sensitivity -= 1
@@ -314,8 +318,8 @@ def verwerk_input(delta):
         # if key_states[sdl2.SDL_SCANCODE_LSHIFT] or key_states[sdl2.SDL_SCANCODE_RSHIFT]:
         if 'a' in response:
             sprint = True
-            delta *= 1.5
-            soundSpeed = 1.5
+            delta *= 2
+            soundSpeed = 2
         else:
             sprint = False
 
@@ -401,12 +405,12 @@ def verwerk_input(delta):
 
 #####################################################################################################################
 # Info: Berekend de richting van de huidige straal voor een bepaald kolom.                                          #
-# Input: r_speler, kolom                                                                                            #
+# Input: r_speler, kolom, r_cameravlak, d_camera                                                                    #
 # Output: r_straal                                                                                                  #
 #####################################################################################################################
 
-def bereken_r_straal(r_speler, kolom):
-    global d_camera
+@jit(nopython=True, cache=True)
+def bereken_r_straal(r_speler, kolom, r_cameravlak, d_camera):
     r_straal_kolom = d_camera * r_speler + (-1 + (2 * kolom / BREEDTE)) * r_cameravlak
     r_straal = r_straal_kolom / np.linalg.norm(r_straal_kolom)
     return r_straal
@@ -414,15 +418,18 @@ def bereken_r_straal(r_speler, kolom):
 
 #####################################################################################################################
 # Info: berekend de afstand tot een muur in de world map en de x-coördinaat in de texture voor op de muur.          #
-# Input: p_speler, r_straal, texture                                                                                #
+# Input: p_speler, r_straal, texture_size, world_map, r_speler                                                      #
 # Output: d_muur, textuur_x                                                                                         #
 #####################################################################################################################
 
-def raycast(p_speler, r_straal, texture):
-    x, y = 0, 0
+@jit(nopython=True, cache=True)
+def raycast(p_speler, r_straal, texture_size, world_map, r_speler):
+    x = 0
+    y = 0
     delta_v = abs(1 / r_straal[0])
     delta_h = abs(1 / r_straal[1])
-    d_muur = textuur_x = 0
+    d_muur = 0
+    textuur_x = 0
 
     if r_straal[0] < 0:
         d_verticaal = (p_speler[0] - int(p_speler[0])) * delta_v
@@ -443,14 +450,14 @@ def raycast(p_speler, r_straal, texture):
                 if 0 < world_map[int(i_verticaal[1])][round(i_verticaal[0]) - 1] <= 2:
                     d_muur = (d_verticaal + y * delta_v) * np.dot(r_speler, r_straal)
                     textuur_afstand = i_verticaal[1] - int(i_verticaal[1])
-                    textuur_x = round(textuur_afstand * texture.size[0])
+                    textuur_x = round(textuur_afstand * texture_size)
                     muur_geraakt = True
 
             # Hoeft niet te checken voor r_straal, is sws >= 0
             elif 0 < world_map[int(i_verticaal[1])][round(i_verticaal[0])] <= 2:
                 d_muur = (d_verticaal + y * delta_v) * np.dot(r_speler, r_straal)
                 textuur_afstand = i_verticaal[1] - int(i_verticaal[1])
-                textuur_x = round(textuur_afstand * texture.size[0])
+                textuur_x = round(textuur_afstand * texture_size)
                 muur_geraakt = True
             y += 1
 
@@ -461,14 +468,14 @@ def raycast(p_speler, r_straal, texture):
                 if 0 < world_map[round(i_horizontaal[1]) - 1][int(i_horizontaal[0])] <= 2:
                     d_muur = (d_horizontaal + x * delta_h) * np.dot(r_speler, r_straal)
                     textuur_afstand = i_horizontaal[0] - int(i_horizontaal[0])
-                    textuur_x = round(textuur_afstand * texture.size[0])
+                    textuur_x = round(textuur_afstand * texture_size)
                     muur_geraakt = True
 
             # Hoeft niet te checken voor r_straal, is sws >= 0
             elif 0 < world_map[round(i_horizontaal[1])][int(i_horizontaal[0])] <= 2:
                 d_muur = (d_horizontaal + x * delta_h) * np.dot(r_speler, r_straal)
                 textuur_afstand = i_horizontaal[0] - int(i_horizontaal[0])
-                textuur_x = round(textuur_afstand * texture.size[0])
+                textuur_x = round(textuur_afstand * texture_size)
                 muur_geraakt = True
             x += 1
     return d_muur, textuur_x
@@ -611,7 +618,7 @@ def render_static(renderer, p_speler, minimap, sprites, text, textInfo, text_spr
 def ghost_movement(p_ghost, possibleDirections, ghostDirection, moveCounter, delta):
     global possibleSpawns
     moveCounter += 1
-    speed = 0.8667 / delta
+    speed = 0.5 / delta
     step = 1 / speed
 
     if moveCounter >= speed:
@@ -752,6 +759,7 @@ def main():
     global possibleSpawns
     global sprint
     global sensitivity
+    global world_map
 
     # ---> Variabelen initialiseren <--- #
     paused = False
@@ -859,6 +867,10 @@ def main():
 
     factory.from_text(f"Sprint: {'enabled' if sprint else 'disabled'}",
                              fontmanager=ManagerFont)
+
+    # Functies al eens callen zodat ze al compileren voordat de game start
+    bereken_r_straal(np.array([0.79197326, -0.61055577]), 81, np.array([-0.61055577, -0.79197326]), 1)
+    raycast(np.array([5.94384612, 16.29289322]), np.array([0.99986466, 0.01645179]), 360, world_map, np.array([0.79197326, -0.61055577]))
 
     # ---> Main game loop <--- #
     # Blijf frames renderen tot we het signaal krijgen dat we moeten afsluiten
@@ -1017,8 +1029,8 @@ def main():
 
             # ---> Vertical raycast <--- #
             for kolom in range(1, window.size[0]):
-                r_straal = bereken_r_straal(r_speler, kolom)
-                (d_muur, textuur_x) = raycast(p_speler, r_straal, texture)
+                r_straal = bereken_r_straal(r_speler, kolom, r_cameravlak, d_camera)
+                (d_muur, textuur_x) = raycast(p_speler, r_straal, texture.size[0], world_map, r_speler)
                 render_kolom(texture, sprites_image, renderer, window, kolom, d_muur, textuur_x)
                 z_buffer.append(d_muur)
 
